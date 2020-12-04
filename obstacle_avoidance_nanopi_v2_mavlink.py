@@ -6,6 +6,7 @@ from ctypes import *
 import io
 import sys
 import struct
+import time
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer,encoding='utf8')
 
@@ -77,6 +78,8 @@ fd = lib.open_and_init_uart()
 
 while True:
     
+    start_time = time.time()
+
     lib.lidar_measure(data)
 
     m10 = []
@@ -109,10 +112,15 @@ while True:
     '''
     滑窗算法Step1 : 初始设置与控制参数
     '''
+
+    #搜索区域限定
+    row_min = 10
+    row_max = 40
+
     #初始滑窗大小
     window_size = 20
     #初始检测区域边界
-    row_start = 0
+    row_start = row_min
     row_end = row_start + window_size
     column_start = 0
     column_end = column_start + window_size
@@ -167,7 +175,7 @@ while True:
                     row_start = row_start+row_step
                     row_end = row_start + window_size
                     #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，search_compeleted置1
-                    if row_end >60:
+                    if row_end >row_max:
                         # print("Seach Compeleted")
                         search_compeleted = 1
                         break#本帧图像检测完，跳出该for循环
@@ -192,7 +200,7 @@ while True:
             row_end = row_start + window_size
             column_end = column_start + window_size
             #待检测块任意一边碰到边界，则认为上一个检测块大小就是最优滑窗大小，本帧图像搜索结束，跳出while循环
-            if column_end > 160 or row_end > 60:
+            if column_end > 160 or row_end > row_max:
                 break
 
     #并输出历史安全滑窗
@@ -209,7 +217,7 @@ while True:
         optimal_window_size = safety_window_size.pop()
 
         #初始检测区域边界，从左上角开始，检测区域边长固定为最优滑窗大小optimal_window_size
-        row_start = 0
+        row_start = row_min
         row_end = row_start + optimal_window_size
         column_start = 0
         column_end = column_start + optimal_window_size
@@ -246,7 +254,7 @@ while True:
                         row_start = row_start+row_step
                         row_end = row_start + optimal_window_size
                         #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，search_compeleted置1
-                        if row_end >60:
+                        if row_end >row_max:
                             # print("Seach Compeleted")
                             search_compeleted = 1
                             break#本帧图像检测完，跳出该for循环
@@ -282,7 +290,7 @@ while True:
                     row_start = row_start+row_step
                     row_end = row_start + optimal_window_size
                     #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，跳出while循环
-                    if row_end >60:
+                    if row_end >row_max:
                         #print("Seach Compeleted")
                         break
             
@@ -323,3 +331,7 @@ while True:
         #print(("当前帧没有可通行区域"),flush=True)
         send_optical_flow_packet(0,0,0,fd)
         print((0,0,0),flush=True)
+    end_time = time.time()
+    total_time = end_time - start_time
+    fps = 1/total_time
+    print(("FPS:{0}",format(fps)),flush=True)
