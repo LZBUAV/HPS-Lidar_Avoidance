@@ -6,6 +6,7 @@ import math
 import ctypes
 from ctypes import *
 import struct
+import time
 
 CDLL("./libhps3d64.so", mode=ctypes.RTLD_GLOBAL)
 lib = cdll.LoadLibrary("./lidar.so")
@@ -52,6 +53,7 @@ def send_optical_flow_packet(x, y,flag,fd):
                        temp,
                        checksum(temp, MAV_OPTICAL_FLOW_extra_crc))
 
+    byte_len = len(temp)
     #print(len(temp))
 
     #print (struct.unpack("<BbBbbbfffffffHBBBH",temp))
@@ -59,7 +61,7 @@ def send_optical_flow_packet(x, y,flag,fd):
     #print([hex(x) for x in temp])
 
     packet_sequence += 1
-    ret = lib.uart_pack_send(temp,fd)
+    ret = lib.uart_pack_send(temp,byte_len,fd)
     if ret != 1:
         print("uart error")
     return temp
@@ -74,6 +76,8 @@ lib.lidar_connect()
 fd = lib.open_and_init_uart()
 
 while True:
+
+    start_time = time.time()
     
     lib.lidar_measure(data)
     
@@ -108,15 +112,22 @@ while True:
     '''
     滑窗算法Step1 : 初始设置与控制参数
     '''
+    #搜索区域限定
+    row_min = 10
+    row_max = 40
+
     #初始滑窗大小
     window_size = 20
     #初始检测区域边界
-    row_start = 0
+    row_start = row_min
     row_end = row_start + window_size
     column_start = 0
     column_end = column_start + window_size
     #生成20*20的滑窗
     window = np.ones((window_size,window_size))*1
+    
+
+
 
     #控制参数
     #是否显示图像
@@ -145,7 +156,7 @@ while True:
     while True:
 
         if display_flag ==1:
-            Z_temp = m11[:,2]
+            Z_temp = m11
             Z_temp = np.array(Z[0:9600])
             Z_temp = Z_temp.reshape(60,160)
         
@@ -190,7 +201,7 @@ while True:
                     row_start = row_start+row_step
                     row_end = row_start + window_size
                     #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，search_compeleted置1
-                    if row_end >60:
+                    if row_end >row_max:
                         # print("Seach Compeleted")
                         search_compeleted = 1
                         break#本帧图像检测完，跳出该for循环
@@ -215,7 +226,7 @@ while True:
             row_end = row_start + window_size
             column_end = column_start + window_size
             #待检测块任意一边碰到边界，则认为上一个检测块大小就是最优滑窗大小，本帧图像搜索结束，跳出while循环
-            if column_end > 160 or row_end > 60:
+            if column_end > 160 or row_end > row_max:
                 break
 
     #并输出历史安全滑窗
@@ -232,7 +243,7 @@ while True:
         optimal_window_size = safety_window_size.pop()
 
         #初始检测区域边界，从左上角开始，检测区域边长固定为最优滑窗大小optimal_window_size
-        row_start = 0
+        row_start = row_min
         row_end = row_start + optimal_window_size
         column_start = 0
         column_end = column_start + optimal_window_size
@@ -244,7 +255,7 @@ while True:
         i = 0
         while True:
             if display_flag == 1:
-                Z_temp = m11[:,2]
+                Z_temp = m11
                 Z_temp = np.array(Z[0:9600])
                 Z_temp = Z_temp.reshape(60,160)
 
@@ -288,7 +299,7 @@ while True:
                         row_start = row_start+row_step
                         row_end = row_start + optimal_window_size
                         #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，search_compeleted置1
-                        if row_end >60:
+                        if row_end >row_max:
                             # print("Seach Compeleted")
                             search_compeleted = 1
                             break#本帧图像检测完，跳出该for循环
@@ -324,7 +335,7 @@ while True:
                     row_start = row_start+row_step
                     row_end = row_start + optimal_window_size
                     #如果检测块已经移动到了最右下角，则本帧图像搜索完毕，跳出while循环
-                    if row_end >60:
+                    if row_end >row_max:
                         # print("Seach Compeleted")
                         break
             
@@ -386,3 +397,7 @@ while True:
         print("当前帧没有可通行区域")
         send_optical_flow_packet(0,0,0,fd)
         print((0,0,0),flush=True)
+    end_time = time.time()
+    total_time = end_time - start_time
+    fps = 1/total_time
+    print("FPS:{0}",format(fps))
