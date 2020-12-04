@@ -1400,6 +1400,7 @@ int lidar_connect()
 int open_and_init_uart()
 {
     int fd = -1;
+	//NanoPi NEO3的串口一在/dev下的名称为ttyS1,实际使用时根据实际情况查看串口名称
 	fd = open("/dev/ttyS1", O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd == -1)
 	{
